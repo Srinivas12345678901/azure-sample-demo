@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:sqs="http://www.mulesoft.org/schema/mule/sqs"
+	xmlns:azure-service-bus-messaging="http://www.mulesoft.org/schema/mule/azure-service-bus-messaging"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+	xmlns:ftp="http://www.mulesoft.org/schema/mule/ftp"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd 
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd 
+http://www.mulesoft.org/schema/mule/ftp http://www.mulesoft.org/schema/mule/ftp/current/mule-ftp.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/azure-service-bus-messaging http://www.mulesoft.org/schema/mule/azure-service-bus-messaging/current/mule-azure-service-bus-messaging.xsd
+http://www.mulesoft.org/schema/mule/sqs http://www.mulesoft.org/schema/mule/sqs/current/mule-sqs.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<ftp:config name="FTP_Config" doc:name="FTP Config" doc:id="a76fc911-c454-4fa4-abb9-9fb2f4180c98" >
+		<ftp:connection host="${ftp.host}" username="${ftp.username}" password="${ftp.password}" port="${ftp.port}" workingDir="/file"/>
+	</ftp:config>
+	<azure-service-bus-messaging:config name="Azure_Service_Bus_Messaging_Connector_Config" doc:name="Azure Service Bus Messaging Connector Config" doc:id="1cf58651-f169-492e-a7c9-26a3dc985695" >
+		<azure-service-bus-messaging:sas-connection namespace="${azueserrvicebus.servicenamespace}" sharedAccessKeyName="${azueserrvicebus.sharedaccesskeyname}" sharedAccessKey="${azueserrvicebus.sharedaccesskey}" />
+	</azure-service-bus-messaging:config>
+	<configuration-properties doc:name="Configuration properties" doc:id="b1deb2d6-d7cc-4465-8811-c1747bb7a89b" file="config\dev.yaml" />
+	<sqs:config name="Amazon_SQS_Configuration" doc:name="Amazon SQS Configuration" doc:id="ce253cef-4a4a-4568-98cf-aaf99fc4f632" >
+		<sqs:basic-connection testQueueArn="${sqs.arn}" accessKey="${sqs.accesskey}" secretKey="${sqs.secretkey}" region="us-west-2"/>
+	
+	</sqs:config>
+	<jms:config name="JMS_Config" doc:name="JMS Config" doc:id="4ba2178b-4e82-4da4-8c3f-cae953727421" >
+		<jms:active-mq-connection username="${actmq.username}" clientId="${actmq.password}">
+			<jms:factory-configuration brokerUrl="${actmq.brokerurl}"/>
+		</jms:active-mq-connection>
+	</jms:config>
+	<configuration doc:name="Configuration" doc:id="799a71c6-0529-4ed6-90fc-3407246c36c2" defaultErrorHandler-ref="globalError_Handler" />
+	<error-handler name="globalError_Handler" doc:id="84dc84b3-2141-44ac-b362-45de2b6ff242" >
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="25eaeb9b-2ff0-441d-845c-deb896a479d3" type="ANY">
+			<logger level="INFO" doc:name="failedMessageArchive" doc:id="80d29484-c17c-4c01-847a-8768ba7ec9fd" message="#[vars.inputMessageRequest]"/>
+			<ee:transform doc:name="Transform Message" doc:id="c695b3b0-1a11-4641-b295-d50057395f6f" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"error": error.errorMessage,
+	"errorType": error.errorType,
+	"currentTimeStamp": now(),
+	"messageRequest": vars.inputMessageRequest,
+	"correlationId": correlationId
+	
+}]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<logger level="INFO" doc:name="Logger" doc:id="02d2802c-5953-4e49-90b5-ea20bec20d44" message="#[payload]"/>
+		</on-error-propagate>
+	</error-handler>
+	
+	
+	
+	
+	
+	
+	
+</mule>

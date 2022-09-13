@@ -1,0 +1,39 @@
+http:
+ host: "localhost"
+ port: "8081"
+ path: "/test"
+
+http1:
+ host: "localhost"
+ port: "8083"
+ path: "/test1"
+ 
+ 
+ftp:
+ host: "localhost"
+ port: "21"
+ username: "ftpuser"
+ password: "ftpuser"
+ directory: "/file"
+ 
+ 
+actmq:
+ username: "admin"
+ password: "admin"
+ brokerurl: "tcp://localhost:61616"
+ 
+azueserrvicebus:
+  servicenamespace: "Publishazure"
+  sharedaccesskeyname: "RootManageSharedAccessKey"
+  sharedaccesskey: "u+873xPcTGlQtUqwAParNFOL8IrZ5SW8Krbwem5dbl0=" 
+
+  
+sqs:
+ url: "https://sqs.us-west-2.amazonaws.com/820750555339/testque"
+ arn: "arn:aws:sqs:us-west-2:820750555339:testque"
+ accesskey: "AKIA36GELTDFTET2RBWS"
+ secretkey: "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"  
+
+ 
+ 
+ 

@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sqs="http://www.mulesoft.org/schema/mule/sqs"
+	xmlns:azure-service-bus-messaging="http://www.mulesoft.org/schema/mule/azure-service-bus-messaging"
+	xmlns:ftp="http://www.mulesoft.org/schema/mule/ftp" xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ftp http://www.mulesoft.org/schema/mule/ftp/current/mule-ftp.xsd 
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd 
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/azure-service-bus-messaging http://www.mulesoft.org/schema/mule/azure-service-bus-messaging/current/mule-azure-service-bus-messaging.xsd
+http://www.mulesoft.org/schema/mule/sqs http://www.mulesoft.org/schema/mule/sqs/current/mule-sqs.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+	<flow name="active" doc:id="d2186ad9-bd15-40f0-8cc3-19dfaecf53b3">
+		<ftp:listener doc:name="On New or Updated File" doc:id="49d2997f-4b1b-4dc5-aa3c-9f38ef69cb96" config-ref="FTP_Config" directory="/file" timeBetweenSizeCheck="5" timeBetweenSizeCheckUnit="SECONDS" outputMimeType="application/csv; streaming=true">
+			<scheduling-strategy >
+				<fixed-frequency frequency="10000"/>
+			</scheduling-strategy>
+		</ftp:listener>
+		<logger level="INFO" doc:name="startlogger" doc:id="5f9a5857-c116-47da-b6ae-df4e5650c69c" message='"Started Reading ftp file"'/>
+		<choice doc:name="Choice" doc:id="71c706e2-5852-4766-96ac-fd24ffed819a" >
+			<when expression="#[sizeOf(payload)&gt;0]">
+				<ee:transform doc:name="ConvertingCsvToJson" doc:id="7d5ed782-55e9-4ce1-80eb-d0050340704e">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json  deferred=true
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+				<foreach doc:name="For Each" doc:id="ee2a23b5-8dc8-4cc4-9e30-c6d5422c3cd0" collection="#[payload]">
+					<set-variable value="#[payload]" doc:name="inputMessageRequest" doc:id="2d7a23d2-5ee6-4139-98b4-61a8f097587b" variableName="inputMessageRequest" />
+					<try doc:name="Try" doc:id="4f109e58-1fd7-4257-b1ae-8025158e8b4f" >
+						<jms:publish doc:name="Publish" doc:id="eaea9a63-a9c6-411e-9e55-5cd888e1e254" config-ref="JMS_Config" destination="source" destinationType="TOPIC">
+						<reconnect />
+					</jms:publish>
+						<error-handler >
+							<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="5353f280-8d28-41ff-a673-167677ebde2e" type="ANY">
+								<logger level="INFO" doc:name="Logger" doc:id="055a9658-0b43-4493-9326-ffd7402c3baa" message="#[payload]"/>
+								<jms:publish doc:name="Publish" doc:id="0bcd1eb2-20db-4e8c-aa69-a31059121440" config-ref="JMS_Config" destination="failedQueue"/>
+							</on-error-continue>
+						</error-handler>
+					</try>
+				</foreach>
+				<!-- <async doc:name="Async" doc:id="0e302eb3-d892-41f9-b913-129f7eb32282">
+			<parallel-foreach doc:name="Parallel For Each" doc:id="d428ba92-ece4-46c8-b7d5-27bb64122824">
+				<set-variable value="#[payload]" doc:name="Set Variable" doc:id="60fe9dc5-56d2-414b-93e4-d7e245d61b10" variableName="record" />
+				<flow-ref doc:name="activemq_subflow" doc:id="a874ace9-6b9c-4b13-a2f2-55ebbfadabad" name="activemq_subflow" />
+				<flow-ref doc:name="azurebus_subflow" doc:id="c9d5cf7c-63cc-4702-868e-55afaa3187d7" name="azurebus_subflow" />
+				<flow-ref doc:name="amazonsqs_subflow" doc:id="536e9f73-5d1b-48e8-a1d9-6f308232752c" name="amazonsqs_subflow" />
+			</parallel-foreach>
+		</async> -->
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="filesNotPresent" doc:id="07aa7503-465b-407d-a6c6-7df0d534ba6c" message='"There are not files present in the FTP location"'/>
+			</otherwise>
+		</choice>
+		
+		
+	</flow>
+	<!-- <sub-flow name="activemq_subflow" doc:id="7471ed55-ccfb-4b19-b93d-353e557c0470" >
+		<try doc:name="Try" doc:id="3e1087ef-c6a6-414e-9c16-f82a5bb35195" >
+			<jms:publish doc:name="PublishthemessagefromActivemq" doc:id="842905cc-78f7-42c5-a3fe-e8dbde9471e3" destination="response" >
+				<jms:message outboundContentType="application/json" >
+					<jms:body ><![CDATA[#[vars.record]]]></jms:body>
+				</jms:message>
+			</jms:publish>
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="81b363d8-ef0e-414f-9cd5-e95d31bcef15" >
+					<ee:transform doc:name="Transform Message" doc:id="2f703b25-174a-425e-a492-de185b54502f" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+-&#45;&#45;
+{
+	correlationId: correlationId,
+	"description": error.description,
+	reason: (error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default ''),
+	errorType: error.errorType.namespace default ''
+	
+	
+	
+	
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow> -->
+	<flow name="activeMqSubscriberFlow" doc:id="3fb5bc5e-6892-4e92-a3fd-9fd984d63de4">
+		<jms:listener doc:name="On New Message" doc:id="c96459f8-f725-479d-83b0-24119dc45022" config-ref="JMS_Config" destination="source" numberOfConsumers="1">
+			<jms:consumer-type >
+				<jms:topic-consumer />
+			</jms:consumer-type>
+		</jms:listener>
+		<logger level="INFO" doc:name="Logger" doc:id="8c178561-ca41-4454-a4d1-28bd0ca1b41f" />
+		<try doc:name="Try" doc:id="351d3b59-964e-4399-ac6c-da0dcf52ad5e" >
+			<jms:publish doc:name="Publish" doc:id="307d7a42-d196-4454-9a9f-9dc55906fd5f" config-ref="JMS_Config" destination="test" >
+				<reconnect />
+			</jms:publish>
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="c4f2cd83-df0a-4e86-91e0-d8423bda0e2f" type="ANY">
+					<logger level="INFO" doc:name="Logger" doc:id="30caba84-1856-4d13-8d99-c7f3965cf6a1" />
+					<file:write doc:name="Write" doc:id="ed90fc75-0d26-4add-b218-d36c82f75b5e" path="C:\Users\sbommareddi\Desktop\Failed\failedRequest.json" mode="APPEND"/>
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</flow>
+	<flow name="amazonSQSFlow" doc:id="281f202d-2708-43a7-a4b4-b5866df048a2">
+		<jms:listener doc:name="On New Message" doc:id="9bf99e00-cb2a-438d-b4e7-30a825e10d6e" config-ref="JMS_Config" destination="source" numberOfConsumers="1">
+			<jms:consumer-type >
+				<jms:topic-consumer />
+			</jms:consumer-type>
+		</jms:listener>
+		
+		<ee:transform doc:name="Transform Message" doc:id="b641c495-69d1-42ef-9198-ed6659a6c0f1" >
+				<ee:message >
+				</ee:message>
+				<ee:variables >
+					<ee:set-variable variableName="sqsRequest" ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	delaySeconds: 0,
+	body: write(vars.record,'application/json'),
+	messageAttributes: {
+		"AccountId": {
+			"stringValue" : "000123456",
+			"dataType" : "String.AccountId"
+		} as Object {
+			class: "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		},
+		"NumberId": {
+			"stringValue" : "230.000000000000000001",
+			"dataType" : "Number"
+		} as Object {
+			class : "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		}
+	} as Object {
+		class: "java.util.HashMap"
+	}
+} as Object {
+	class: "org.mule.extension.sqs.api.model.Message"
+}]]></ee:set-variable>
+				</ee:variables>
+			</ee:transform>
+		<until-successful maxRetries="5" doc:name="Until Successful" doc:id="f6d56d7e-fbc4-457e-a719-b16027a1d4c6" millisBetweenRetries="2000">
+			<try doc:name="Try" doc:id="8a3edd60-e52b-4250-999e-7a4003c59ae7" >
+				<sqs:send-message doc:name="Send message" doc:id="e44a5483-b56f-4bde-8eba-70e8c8cd026b" config-ref="Amazon_SQS_Configuration" queueUrl="https://sqs.us-west-2.amazonaws.com/820750555339/testsqs">
+			<reconnect />
+				<sqs:message><![CDATA[#[vars.sqsRequest]]]></sqs:message>
+
+			</sqs:send-message>
+				<error-handler >
+					<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="fd16520d-5777-483f-a2ff-436d80637ece" type="ANY">
+						<logger level="INFO" doc:name="Logger" doc:id="9c5d10ea-4f1a-4281-b485-30c5db49d579" message="#[payload]"/>
+						<file:write doc:name="Write" doc:id="3cf8e2c2-baa7-4afb-a845-3c3596685ef3" path="C:\Users\sbommareddi\Desktop\Failed\failedRequestSqS.json" mode="APPEND"/>
+					</on-error-continue>
+				</error-handler>
+			</try>
+		</until-successful>
+		
+	</flow>
+	<flow name="azureServiceBusFlow" doc:id="9c0ac175-f78c-4a56-8fa4-b3c52d4e771b">
+		<jms:listener doc:name="On New Message" doc:id="70f18073-3394-4d5a-9582-a632ecd11921" config-ref="JMS_Config" destination="source" numberOfConsumers="1">
+			<jms:consumer-type >
+				<jms:topic-consumer />
+			</jms:consumer-type>
+		</jms:listener>
+		
+		<logger level="INFO" doc:name="Logger" doc:id="bec40d89-d699-42f9-bccc-cfdba12b5886" />
+		<try doc:name="Try" doc:id="9b4347f8-57fd-4a36-aab2-c00ea263fca7" >
+			<azure-service-bus-messaging:send destinationName="testtopic" doc:name="azureServiceBusPublish" doc:id="5c94649a-77d0-43c8-801f-655df0dd95c2" config-ref="Azure_Service_Bus_Messaging_Connector_Config">
+			<reconnect />
+
+			</azure-service-bus-messaging:send>
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="b4f29197-7215-47b5-9de7-31473b8479e4" type="ANY">
+					<logger level="INFO" doc:name="Logger" doc:id="e97da20d-78dc-4085-bb31-ba187b8cfacb" message="#[payload]"/>
+					<file:write doc:name="Write" doc:id="ee54df07-e9d6-4722-a752-28b24a0bdc30" path="C:\Users\sbommareddi\Desktop\Failed\failedRequestAzure.json" mode="APPEND"/>
+				</on-error-continue>
+			</error-handler>
+		</try>
+		
+	</flow>
+	<!-- <sub-flow name="azurebus_subflow" doc:id="93a0a3fb-94ee-4edf-9042-b9da2d48900e" >
+		<try doc:name="Try" doc:id="fb4d990a-172a-4e2e-975f-1439d4957e89" >
+			<azure-service-bus-messaging:send destinationName="testtopic" doc:name="azureServiceBusPublish" doc:id="f0d1a0d6-8eb3-46a4-8903-9ad87779dd66" config-ref="Azure_Service_Bus_Messaging_Connector_Config" >
+				<azure-service-bus-messaging:body ><![CDATA[#[vars.record]]]></azure-service-bus-messaging:body>
+			</azure-service-bus-messaging:send>
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="e01aca2b-33de-41ed-acf3-6d5b6b8764b8" >
+					<ee:transform doc:name="Transform Message" doc:id="22d041cc-b31d-495b-b7e3-3ba1e4fd3422" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+-&#45;&#45;
+{
+	correlationId: correlationId,
+	"description": error.description,
+	reason: (error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default ''),
+	errorType: error.errorType.namespace default ''
+	
+	
+	
+	
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow> -->
+	<!-- <sub-flow name="amazonsqs_subflow" doc:id="bf0c69aa-621e-4bab-97fe-209ea7b45953" >
+		<try doc:name="Try" doc:id="2a509385-b36b-471a-89e3-219d79894c3e" >
+			<ee:transform doc:name="Transform Message" doc:id="09b65ad5-e926-4b6f-b7fe-5f1067d9b940" >
+				<ee:message >
+				</ee:message>
+				<ee:variables >
+					<ee:set-variable variableName="sqsRequest" ><![CDATA[%dw 2.0
+output application/java
+-&#45;&#45;
+{
+	delaySeconds: 0,
+	body: write(vars.record,'application/json'),
+	messageAttributes: {
+		"AccountId": {
+			"stringValue" : "000123456",
+			"dataType" : "String.AccountId"
+		} as Object {
+			class: "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		},
+		"NumberId": {
+			"stringValue" : "230.000000000000000001",
+			"dataType" : "Number"
+		} as Object {
+			class : "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		}
+	} as Object {
+		class: "java.util.HashMap"
+	}
+} as Object {
+	class: "org.mule.extension.sqs.api.model.Message"
+}]]></ee:set-variable>
+				</ee:variables>
+			</ee:transform>
+			<sqs:send-message doc:name="Send message" doc:id="0bdff80a-2514-40f0-88ec-8b1397fcb78e" config-ref="Amazon_SQS_Configuration" queueUrl="https://sqs.us-west-2.amazonaws.com/820750555339/testsqs" >
+				<sqs:message ><![CDATA[#[vars.sqsRequest]]]></sqs:message>
+			</sqs:send-message>
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="0dac5682-e355-4db5-a5c4-dcef30f856c3" >
+					<ee:transform doc:name="Transform Message" doc:id="b7bb4c99-87e2-4442-bf42-998ff2af2481" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+-&#45;&#45;
+{
+	correlationId: correlationId,
+	"description": error.description,
+	reason: (error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default ''),
+	errorType: error.errorType.namespace default ''
+	
+	
+	
+	
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow> -->
+</mule>
